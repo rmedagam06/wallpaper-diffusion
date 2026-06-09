@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+*.so
+
+# Virtual environment
+venv/
+.venv/
+env/
+.env/
+
+# Data — raw and processed images (too large for git; keep only metadata)
+data/raw/
+data/processed/
+
+# Model checkpoints
+checkpoints/
+
+# Evaluation outputs
+eval/generated/
+
+# Claude Code settings
+.claude/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Weights & Biases
+wandb/
+
+# Generated images
+output.png
+output_*.png
