@@ -6,6 +6,8 @@ import copy
 import sys
 import wandb
 
+USE_WANDB = False  # set True on Colab after running `wandb login`
+
 # Allow imports from the project root
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -26,11 +28,12 @@ GRAD_CHECKPOINT = (DEVICE == "cuda")
 CKPT_DIR        = Path("checkpoints")
 CKPT_DIR.mkdir(exist_ok=True)
 
-wandb.init(
-    project="wallpaper-diffusion",
-    config=dict(batch_size=BATCH_SIZE, lr=LR, total_steps=TOTAL_STEPS,
-                cfg_drop=CFG_DROP, grad_checkpoint=GRAD_CHECKPOINT)
-)
+if USE_WANDB:
+    wandb.init(
+        project="wallpaper-diffusion",
+        config=dict(batch_size=BATCH_SIZE, lr=LR, total_steps=TOTAL_STEPS,
+                    cfg_drop=CFG_DROP, grad_checkpoint=GRAD_CHECKPOINT)
+    )
 
 vae                = load_vae(DEVICE)
 tokenizer, encoder = load_clip(DEVICE)
@@ -38,12 +41,12 @@ unet               = SimpleUNet().to(DEVICE)
 scheduler          = DDPMScheduler().to(DEVICE)
 ema_unet           = copy.deepcopy(unet)
 optimizer          = torch.optim.AdamW(unet.parameters(), lr=LR, weight_decay=0.01)
-scaler             = torch.cuda.amp.GradScaler(enabled=(DEVICE == "cuda"))
+scaler             = torch.amp.GradScaler("cuda", enabled=(DEVICE == "cuda"))
 
 dataset = WallpaperDataset("data/metadata_processed.jsonl")
 loader  = DataLoader(
     dataset, batch_size=BATCH_SIZE, shuffle=True,
-    num_workers=4, pin_memory=True, drop_last=True
+    num_workers=0, pin_memory=True, drop_last=True
 )
 
 print(f"Training on {len(dataset)} images  |  device={DEVICE}  |  steps={TOTAL_STEPS}")
@@ -65,7 +68,7 @@ for epoch in range(9999):
         t      = torch.randint(0, scheduler.T, (BATCH_SIZE,), device=DEVICE)
         noisy  = scheduler.add_noise(latents, noise, t)
 
-        with torch.cuda.amp.autocast(enabled=(DEVICE == "cuda")):
+        with torch.amp.autocast("cuda", enabled=(DEVICE == "cuda")):
             pred = unet(noisy, t, context, use_grad_checkpoint=GRAD_CHECKPOINT)
             loss = F.mse_loss(pred, noise)
 
@@ -83,7 +86,8 @@ for epoch in range(9999):
         step += 1
         if step % LOG_EVERY == 0:
             print(f"Step {step:>6}/{TOTAL_STEPS}  loss={loss.item():.4f}")
-            wandb.log({"loss": loss.item(), "step": step})
+            if USE_WANDB:
+                wandb.log({"loss": loss.item(), "step": step})
         if step % SAVE_EVERY == 0:
             torch.save(
                 {"step": step, "unet": unet.state_dict(),
@@ -98,4 +102,5 @@ for epoch in range(9999):
 
 torch.save(ema_unet.state_dict(), CKPT_DIR / "final_ema_unet.pt")
 print("Training complete. Final weights: checkpoints/final_ema_unet.pt")
-wandb.finish()
+if USE_WANDB:
+    wandb.finish()
